@@ -5,7 +5,7 @@ import math
 class LayerNormalization(nn.Module):
     """Layer normalization layer for the transformer model."""
     def __init__(self, features:int, eps:float=1e-6)-> None:
-        super(LayerNormalization,self).__init__()
+        super().__init__()
         """
         Args:
             features (int): Number of features in the input.
@@ -27,7 +27,32 @@ class LayerNormalization(nn.Module):
         std = x.std(-1, keepdim=True)
         x = (x - mean) / (std + self.eps)
         return self.alpha * x + self.bias
-        
+class FeedForward(nn.Module):
+    """Feed forward layer for the transformer model."""
+    def __init__(self, d_model:int, d_ff:int, dropout:float)-> None:
+        super().__init__()
+        """
+        Args:
+            d_model (int): Dimension of the model.
+            d_ff (int): Dimension of the feed forward layer.
+            dropout (float): Dropout probability.
+        """
+        self.linear_1 = nn.Linear(d_model, d_ff)
+        self.dropout = nn.Dropout(dropout)
+        self.linear_2 = nn.Linear(d_ff, d_model)
+    def forward(self, x:torch.Tensor)->torch.Tensor:
+        """
+        Forward pass for the feed forward layer.
+        Args:
+            x (torch.Tensor): Input tensor of shape (batch_size, seq_len, d_model).
+        Returns:
+            torch.Tensor: Output tensor of shape (batch_size, seq_len, d_model).
+        """
+        x = torch.relu(self.linear_1(x))
+        x = self.linear_2(self.dropout(x))
+        return x
+
+
 class InputEmbedding(nn.Module):
     """Input embedding layer for the transformer model."""
     def __init__(self, d_model:int, vocab_size:int)-> None:
@@ -36,7 +61,7 @@ class InputEmbedding(nn.Module):
             d_model (int): Dimension of the model.
             vocab_size (int): Size of the vocabulary.
         """
-        super(InputEmbedding,self).__init__()
+        super().__init__()
         self.d_model = d_model
         self.vocab_size = vocab_size
         self.embedding = nn.Embedding(vocab_size, d_model)
@@ -60,7 +85,7 @@ class PositionalEncoding(nn.Module):
             seq_len (int): Length of the input sequence.
             dropout (float): Dropout probability.
         """
-        super(PositionalEncoding,self).__init__()
+        super().__init__()
         self.d_model = d_model
         self.seq_len = seq_len
         self.dropout = nn.Dropout(p=dropout)
