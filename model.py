@@ -2,6 +2,32 @@ import torch
 import torch.nn as nn
 import math
 
+class LayerNormalization(nn.Module):
+    """Layer normalization layer for the transformer model."""
+    def __init__(self, features:int, eps:float=1e-6)-> None:
+        super(LayerNormalization,self).__init__()
+        """
+        Args:
+            features (int): Number of features in the input.
+            eps (float): Small value to avoid division by zero.
+        """
+        self.eps = eps
+        self.alpha = nn.Parameter(torch.ones(features))
+        self.bias = nn.Parameter(torch.zeros(features))
+
+    def forward(self, x:torch.Tensor)->torch.Tensor:
+        """
+        Forward pass for the layer normalization layer.
+        Args:
+            x (torch.Tensor): Input tensor of shape (batch_size, seq_len, features).
+        Returns:
+            torch.Tensor: Layer normalized tensor of shape (batch_size, seq_len, features).
+        """
+        mean = x.mean(-1, keepdim=True)
+        std = x.std(-1, keepdim=True)
+        x = (x - mean) / (std + self.eps)
+        return self.alpha * x + self.bias
+        
 class InputEmbedding(nn.Module):
     """Input embedding layer for the transformer model."""
     def __init__(self, d_model:int, vocab_size:int)-> None:
