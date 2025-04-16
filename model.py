@@ -113,7 +113,27 @@ class PositionalEncoding(nn.Module):
         """
         x = x + (self.pe[:, :x.size(1), :]).require_grad_(False)
         return self.dropout(x)
-    
+class ResidualConnection(nn.Module):
+    """Residual connection layer for the transformer model."""
+    def __init__(self,features, dropout:float)-> None:
+        """
+        Args:
+            features (int): Number of features in the input.
+            dropout (float): Dropout probability.
+        """
+        super().__init__()
+        self.norm = LayerNormalization(features)
+        self.dropout = nn.Dropout(dropout)
+    def forward(self, x:torch.Tensor, sublayer:nn.Module)->torch.Tensor:
+        """
+        Forward pass for the residual connection layer.
+        Args:
+            x (torch.Tensor): Input tensor of shape (batch_size, seq_len, features).
+            sublayer (nn.Module): Sublayer to apply the residual connection to.
+        Returns:
+            torch.Tensor: Output tensor of shape (batch_size, seq_len, features).
+        """
+        return x + self.dropout(sublayer(self.norm(x)))
 class MultiHeadAttention(nn.Module):
     """Multi-head attention layer for the transformer model."""
     def __init__(self, d_model:int, h:int, dropout:float)-> None:
