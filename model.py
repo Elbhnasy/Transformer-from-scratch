@@ -206,3 +206,56 @@ class MultiHeadAttention(nn.Module):
         # (batch_size, h, seq_len, d_k) -> (batch_size, seq_len, h, d_k) -> (batch_size, seq_len, d_model)
         x = x.transpose(1,2).contiguous().view(x.shape[0] ,-1 ,self.h * self.d_k)
         return self.w_o(x)
+    
+class EncoderLayer(nn.Module):
+    """Encoder layer for the transformer model."""
+    def __init__(self, features:int, self_attention_block:MultiHeadAttention, feed_forward_block: FeedForwardBlock, dropout:float)-> None:
+        """
+        Args:
+            features (int): Number of features in the input.
+            self_attention_block (MultiHeadAttention): Multi-head attention block.
+            feed_forward_block (FeedForwardBlock): Feed forward block.
+            dropout (float): Dropout probability.
+        """
+        super().__init__()
+        self.self_attention_block = self_attention_block
+        self.feed_forward_block = feed_forward_block
+        self.residual_connection = nn.ModuleList([ResidualConnection(features, dropout) for _ in range(2)])
+
+    def forward(self, x:torch.Tensor, mask:torch.Tensor)->torch.Tensor:
+        """
+        Forward pass for the encoder layer.
+        Args:
+            x (torch.Tensor): Input tensor of shape (batch_size, seq_len, features).
+            mask (torch.Tensor): Optional mask tensor of shape (batch_size, 1, 1, seq_len).
+        Returns:
+            torch.Tensor: Output tensor of shape (batch_size, seq_len, features).
+        """
+        x = self.residual_connection[0](x, lambda x: self.self_attention_block(x, x, x, mask))
+        x = self.residual_connection[1](x, self.feed_forward_block)
+        return x
+    
+class Encoder(nn.Module):
+    def __init__(self, features:int, layers:nn.ModuleList)-> None:
+        """
+        Encoder for the transformer model.
+        Args:
+            features (int): Number of features in the input.
+            layers (nn.ModuleList): List of encoder layers.
+        """
+        super().__init__()
+        self.layers = layers
+        self.norm = LayerNormalization(features)
+    def forward(self, x:torch.Tensor, mask:torch.Tensor)-> torch.Tensor:
+        """
+        Forward pass for the encoder.
+        Args:
+            x (torch.Tensor): Input tensor of shape (batch_size, seq_len, features).
+            mask (torch.Tensor): Optional mask tensor of shape (batch_size, 1, 1, seq_len).
+        Returns:
+            torch.Tensor: Output tensor of shape (batch_size, seq_len, features).
+        """
+        for layer in self.layers:
+            x = layer(x, mask)
+        return self.norm(x)
+    
