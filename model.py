@@ -27,7 +27,7 @@ class LayerNormalization(nn.Module):
         std = x.std(-1, keepdim=True)
         x = (x - mean) / (std + self.eps)
         return self.alpha * x + self.bias
-class FeedForward(nn.Module):
+class FeedForwardBlock(nn.Module):
     """Feed forward layer for the transformer model."""
     def __init__(self, d_model:int, d_ff:int, dropout:float)-> None:
         super().__init__()
@@ -111,7 +111,7 @@ class PositionalEncoding(nn.Module):
         Returns:
             torch.Tensor: Positional encoded tensor of shape (batch_size, seq_len, d_model).
         """
-        x = x + (self.pe[:, :x.size(1), :]).require_grad_(False)
+        x = x + (self.pe[:, :x.size(1), :]).requires_grad_(False)
         return self.dropout(x)
 
 class ResidualConnection(nn.Module):
@@ -172,13 +172,13 @@ class MultiHeadAttention(nn.Module):
             torch.Tensor: Output tensor of shape (batch_size, num_heads, seq_len, d_k).
         """
         d_k = query.shape[-1]
-        attenttion_scores = (query @ key.transpose(-2, -1)) / math.sqrt(d_k)
+        attention_scores = (query @ key.transpose(-2, -1)) / math.sqrt(d_k)
         if mask is not None:
-            attenttion_scores = attenttion_scores.masked_fill(mask == 0, -1e9)
-        attenttion_scores = torch.softmax(attenttion_scores, dim=-1)
+            attention_scores = attention_scores.masked_fill(mask == 0, -1e9)
+        attention_scores = torch.softmax(attention_scores, dim=-1)
         if dropout is not None:
-            attenttion_scores = dropout(attenttion_scores)
-        return (attenttion_scores @ value), attenttion_scores
+            attention_scores = dropout(attention_scores)
+        return (attention_scores @ value), attention_scores
 
     def forward(self, q:torch.Tensor, k:torch.Tensor, v:torch.Tensor, mask:torch.Tensor=None)->torch.Tensor:
         """
@@ -259,3 +259,83 @@ class Encoder(nn.Module):
             x = layer(x, mask)
         return self.norm(x)
     
+class DecoderBlock(nn.Module):
+    """ Decoder block for the Transformer model. """
+    def __init__ (self, features:int, self_attention_block:MultiHeadAttention, cross_attention_block:MultiHeadAttention, feed_forward_block:FeedForwardBlock, dropout:float)-> None:
+        """
+        Args:
+            features (int): Number of features in the input.
+            self_attention_block (MultiHeadAttention): Multi-head attention block for self-attention.
+            cross_attention_block (MultiHeadAttention): Multi-head attention block for cross-attention.
+            feed_forward_block (FeedForwardBlock): Feed forward block.
+            dropout (float): Dropout probability.
+        """
+        super().__init__()
+        self.self_attention_block = self_attention_block
+        self.cross_attention_block = cross_attention_block
+        self.feed_forward_block = feed_forward_block
+        self.residual_connections = nn.ModuleList([ResidualConnection(features, dropout) for _ in range(3)])
+
+    def forward(self, x:torch.Tensor, encoder_output:torch.Tensor, src_mask:torch.Tensor, tgt_mask:torch.Tensor)-> torch.Tensor:
+        """
+        Forward pass for the decoder block.
+        Args:
+            x (torch.Tensor): Input tensor of shape (batch_size, seq_len, features).
+            encoder_output (torch.Tensor): Encoder output tensor of shape (batch_size, seq_len, features).
+            src_mask (torch.Tensor): Source mask tensor of shape (batch_size, 1, 1, seq_len).
+            tgt_mask (torch.Tensor): Target mask tensor of shape (batch_size, 1, 1, seq_len).
+        Returns:
+            torch.Tensor: Output tensor of shape (batch_size, seq_len, features).
+        """
+        x = self.residual_connections[0](x, lambda x: self.self_attention_block(x, x, x, tgt_mask))
+        x = self.residual_connections[1](x, lambda x: self.cross_attention_block(x, encoder_output, encoder_output, src_mask))
+        x = self.residual_connections[2](x, self.feed_forward_block)
+        return x
+        
+class Decoder(nn.Module):
+    """ Decoder for the Transformer model. """
+    def __init__(self, features:int, layers:nn.ModuleList)-> None:
+        """
+        Args:
+            features (int): Number of features in the input.
+            layers (nn.ModuleList): List of decoder layers.
+        """
+        super().__init__()
+        self.layers = layers
+        self.norm = LayerNormalization(features)
+
+    def forward(self, x:torch.Tensor, encoder_output:torch.Tensor, src_mask:torch.Tensor, tgt_mask:torch.Tensor)-> torch.Tensor:
+        """
+        Forward pass for the decoder.
+        Args:
+            x (torch.Tensor): Input tensor of shape (batch_size, seq_len, features).
+            encoder_output (torch.Tensor): Encoder output tensor of shape (batch_size, seq_len, features).
+            src_mask (torch.Tensor): Source mask tensor of shape (batch_size, 1, 1, seq_len).
+            tgt_mask (torch.Tensor): Target mask tensor of shape (batch_size, 1, 1, seq_len).
+        Returns:
+            torch.Tensor: Output tensor of shape (batch_size, seq_len, features).
+        """
+        for layer in self.layers:
+            x = layer(x, encoder_output, src_mask, tgt_mask)
+        return self.norm(x)
+    
+class ProjectionLayer(nn.Module):
+    """Projection layer for the transformer model."""
+    def __init__(self, d_model:int, vocab_size:int)-> None:
+        """
+        Args:
+            d_model (int): Dimension of the model.
+            vocab_size (int): Size of the vocabulary.
+        """
+        super().__init__()
+        self.proj = nn.Linear(d_model, vocab_size)
+
+    def forward(self, x:torch.Tensor)-> torch.Tensor:
+        """
+        Forward pass for the projection layer.
+        Args:
+            x (torch.Tensor): Input tensor of shape (batch_size, seq_len, d_model).
+        Returns:
+            torch.Tensor: Output tensor of shape (batch_size, seq_len, vocab_size).
+        """
+        return self.proj(x)
