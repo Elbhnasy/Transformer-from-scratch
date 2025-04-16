@@ -113,6 +113,7 @@ class PositionalEncoding(nn.Module):
         """
         x = x + (self.pe[:, :x.size(1), :]).require_grad_(False)
         return self.dropout(x)
+
 class ResidualConnection(nn.Module):
     """Residual connection layer for the transformer model."""
     def __init__(self,features, dropout:float)-> None:
