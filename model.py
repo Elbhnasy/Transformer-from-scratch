@@ -134,6 +134,7 @@ class ResidualConnection(nn.Module):
             torch.Tensor: Output tensor of shape (batch_size, seq_len, features).
         """
         return x + self.dropout(sublayer(self.norm(x)))
+
 class MultiHeadAttention(nn.Module):
     """Multi-head attention layer for the transformer model."""
     def __init__(self, d_model:int, h:int, dropout:float)-> None:
