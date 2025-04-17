@@ -207,7 +207,7 @@ class MultiHeadAttention(nn.Module):
         x = x.transpose(1,2).contiguous().view(x.shape[0] ,-1 ,self.h * self.d_k)
         return self.w_o(x)
     
-class EncoderLayer(nn.Module):
+class EncoderBlock(nn.Module):
     """Encoder layer for the transformer model."""
     def __init__(self, features:int, self_attention_block:MultiHeadAttention, feed_forward_block: FeedForwardBlock, dropout:float)-> None:
         """
@@ -339,3 +339,115 @@ class ProjectionLayer(nn.Module):
             torch.Tensor: Output tensor of shape (batch_size, seq_len, vocab_size).
         """
         return self.proj(x)
+    
+class Transformer(nn.Module):
+    """Transformer model."""
+    def __init__(self, encoder: Encoder, decoder: Decoder, src_embed: InputEmbedding, tgt_embed: InputEmbedding, src_pos: PositionalEncoding, tgt_pos: PositionalEncoding, projection_layer: ProjectionLayer)-> None:
+        """
+        Args:
+            encoder (Encoder): Encoder module.
+            decoder (Decoder): Decoder module.
+            src_embed (InputEmbeddings): Source input embedding module.
+            tgt_embed (InputEmbeddings): Target input embedding module.
+            src_pos (PositionalEncoding): Source positional encoding module.
+            tgt_pos (PositionalEncoding): Target positional encoding module.
+            projection_layer (ProjectionLayer): Projection layer for the output.
+        """
+        super().__init__()
+        self.encoder = encoder
+        self.decoder = decoder
+        self.src_embed = src_embed
+        self.tgt_embed = tgt_embed
+        self.src_pos = src_pos
+        self.tgt_pos = tgt_pos
+        self.projection_layer = projection_layer
+    
+    def encode(self, src:torch.Tensor, src_mask:torch.Tensor)-> torch.Tensor:
+        """
+        Encode the source sequence.
+        Args:
+            src (torch.Tensor): Source input tensor of shape (batch_size, seq_len).
+            src_mask (torch.Tensor): Source mask tensor of shape (batch_size, 1, 1, seq_len).
+        Returns:
+            torch.Tensor: Encoded output tensor of shape (batch_size, seq_len, features).
+        """
+        src = self.src_embed(src)
+        src = self.src_pos(src)
+        return self.encoder(src, src_mask)
+    
+    def decode(self, encoder_output:torch.Tensor, src_mask:torch.Tensor, tgt:torch.Tensor, tgt_mask:torch.Tensor)-> torch.Tensor:
+        """
+        Decode the target sequence.
+        Args:
+            encoder_output (torch.Tensor): Encoder output tensor of shape (batch_size, seq_len, features).
+            src_mask (torch.Tensor): Source mask tensor of shape (batch_size, 1, 1, seq_len).
+            tgt (torch.Tensor): Target input tensor of shape (batch_size, seq_len).
+            tgt_mask (torch.Tensor): Target mask tensor of shape (batch_size, 1, 1, seq_len).
+        Returns:
+            torch.Tensor: Decoded output tensor of shape (batch_size, seq_len, features).
+        """
+        tgt = self.tgt_embed(tgt)
+        tgt = self.tgt_pos(tgt)
+        return self.decoder(tgt, encoder_output, src_mask, tgt_mask)
+    
+    def project(self, x:torch.Tensor)-> torch.Tensor:
+        """
+        Project the output to the vocabulary size.
+        Args:
+            x (torch.Tensor): Input tensor of shape (batch_size, seq_len, features).
+        Returns:
+            torch.Tensor: Output tensor of shape (batch_size, seq_len, vocab_size).
+        """
+        return self.projection_layer(x)
+    
+def build_transformer(src_vocab_size: int, tgt_vocab_size: int, src_seq_len: int, tgt_seq_len: int, d_model: int=512, N: int=6, h: int=8, dropout: float=0.1, d_ff: int=2048) -> Transformer:
+    """
+    Build a transformer model.
+    Args:
+        src_vocab_size (int): Source vocabulary size.
+        tgt_vocab_size (int): Target vocabulary size.
+        src_seq_len (int): Source sequence length.
+        tgt_seq_len (int): Target sequence length.
+        d_model (int): Dimension of the model.
+        N (int): Number of encoder/decoder layers.
+        h (int): Number of attention heads.
+        dropout (float): Dropout probability.
+        d_ff (int): Dimension of the feed forward layer.
+    Returns:
+        Transformer: Transformer model.
+    """
+    # Create the input and output embedding layers
+    src_embed = InputEmbedding(d_model, src_vocab_size)
+    tgt_embed = InputEmbedding(d_model, tgt_vocab_size)
+
+    # Create the positional encoding layers
+    src_pos = PositionalEncoding(d_model, src_seq_len, dropout)
+    tgt_pos = PositionalEncoding(d_model, tgt_seq_len, dropout)
+
+    # Create the encoder blocks
+    encoder_blocks = []
+    for _ in range(N):
+        encoder_self_attention_block = MultiHeadAttention(d_model, h, dropout)
+        feed_forward_block = FeedForwardBlock(d_model, d_ff, dropout)
+        encoder_block = EncoderBlock(d_model, encoder_self_attention_block, feed_forward_block, dropout)
+        encoder_blocks.append(encoder_block)
+
+    # Create the decoder blocks
+    decoder_blocks = []
+    for _ in range(N):
+        decoder_self_attention_block = MultiHeadAttention(d_model, h, dropout)
+        decoder_cross_attention_block = MultiHeadAttention(d_model, h, dropout)
+        feed_forward_block = FeedForwardBlock(d_model, d_ff, dropout)
+        decoder_block = DecoderBlock(d_model, decoder_self_attention_block, decoder_cross_attention_block, feed_forward_block, dropout)
+        decoder_blocks.append(decoder_block)
+
+    # Create the encoder and decoder
+    encoder = Encoder(d_model, nn.ModuleList(encoder_blocks))
+    decoder = Decoder(d_model, nn.ModuleList(decoder_blocks))
+
+    # Create the projection layer
+    projection_layer = ProjectionLayer(d_model, tgt_vocab_size)
+
+    # Create the transformer model
+    transformer = Transformer(encoder, decoder, src_embed, tgt_embed, src_pos, tgt_pos, projection_layer)
+    return transformer
