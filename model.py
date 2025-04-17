@@ -24,22 +24,26 @@ class LayerNormalization(nn.Module):
             torch.Tensor: Layer normalized tensor of shape (batch_size, seq_len, features).
         """
         mean = x.mean(-1, keepdim=True)
-        std = x.std(-1, keepdim=True)
-        x = (x - mean) / (std + self.eps)
+        var = ((x - mean) ** 2).mean(-1, keepdim=True)
+        x = (x - mean) / torch.sqrt(var + self.eps)
         return self.alpha * x + self.bias
+
 class FeedForwardBlock(nn.Module):
     """Feed forward layer for the transformer model."""
     def __init__(self, d_model:int, d_ff:int, dropout:float)-> None:
-        super().__init__()
         """
         Args:
             d_model (int): Dimension of the model.
             d_ff (int): Dimension of the feed forward layer.
             dropout (float): Dropout probability.
         """
+        super().__init__()
         self.linear_1 = nn.Linear(d_model, d_ff)
         self.dropout = nn.Dropout(dropout)
         self.linear_2 = nn.Linear(d_ff, d_model)
+        # Use GELU activation for better performance
+        self.activation = nn.GELU()
+    
     def forward(self, x:torch.Tensor)->torch.Tensor:
         """
         Forward pass for the feed forward layer.
@@ -48,7 +52,7 @@ class FeedForwardBlock(nn.Module):
         Returns:
             torch.Tensor: Output tensor of shape (batch_size, seq_len, d_model).
         """
-        x = torch.relu(self.linear_1(x))
+        x = self.activation(self.linear_1(x))
         x = self.linear_2(self.dropout(x))
         return x
 
