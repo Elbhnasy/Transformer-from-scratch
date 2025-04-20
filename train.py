@@ -2,7 +2,6 @@ from model import build_transformer
 from dataset import BilingualDataset, causal_mask
 from config import get_config, get_weights_file_path, latest_weights_file_path
 
-import torchtext.datasets as datasets
 import torch
 import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader, random_split
@@ -154,7 +153,7 @@ def greedy_decode(model, source, source_mask, tokenizer_src, tokenizer_tgt, max_
         
         # Get model prediction
         out = model.decode(encoder_output, source_mask, decoder_input, decoder_mask)
-        prob = model.proj(out[:, -1])
+        prob = model.project(out[:, -1])
         
         # Get next token with highest probability
         _, next_word = torch.max(prob, dim=-1)
@@ -293,7 +292,7 @@ def compute_validation_loss(model, validation_batch, tokenizer_tgt, device, loss
     # Forward pass
     encoder_output = model.encode(encoder_input, encoder_mask)
     decoder_output = model.decode(encoder_output, encoder_mask, decoder_input, decoder_mask)
-    proj_output = model.proj(decoder_output)
+    proj_output = model.project(decoder_output)
     
     # Calculate loss
     loss = loss_fn(proj_output.view(-1, tokenizer_tgt.get_vocab_size()), label.view(-1))
@@ -427,7 +426,7 @@ def train_model(config:dict):
                 with torch.cuda.amp.autocast():
                     encoder_output = model.encode(encoder_input, encoder_mask)
                     decoder_output = model.decode(encoder_output, encoder_mask, decoder_input, decoder_mask)
-                    proj_output = model.proj(decoder_output)
+                    proj_output = model.project(decoder_output)
                     loss = loss_fn(proj_output.view(-1, tokenizer_tgt.get_vocab_size()), label.view(-1))
                 
                 # Backward pass with gradient scaling
@@ -440,7 +439,7 @@ def train_model(config:dict):
                 # Standard forward pass
                 encoder_output = model.encode(encoder_input, encoder_mask)
                 decoder_output = model.decode(encoder_output, encoder_mask, decoder_input, decoder_mask)
-                proj_output = model.proj(decoder_output)
+                proj_output = model.project(decoder_output)
                 
                 # Calculate loss
                 loss = loss_fn(proj_output.view(-1, tokenizer_tgt.get_vocab_size()), label.view(-1))
