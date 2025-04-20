@@ -1,0 +1,11 @@
+# This file is used to install the required packages for the project.
+torch==2.6.0
+torchvision==0.21.0
+torchaudio==2.6.0
+torchtext==0.18.0
+datasets==3.5.0
+tokenizers==0.15.0
+torchmetrics==1.6.3
+tensorboard==2.19.0
+altair==5.5.0
+wandb==0.19.9
