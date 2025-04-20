@@ -4,24 +4,13 @@ from model import build_transformer
 from tokenizers import Tokenizer
 from datasets import load_dataset
 from dataset import BilingualDataset, causal_mask
+from utils import greedy_decode, DummyContextManager, load_tokenizer
+
 import torch
 import sys
 import time
 import os
 from typing import Union, List, Optional
-
-# Global cache for tokenizers to avoid reloading
-_TOKENIZER_CACHE = {}
-
-def load_tokenizer(config, lang):
-    """Load and cache tokenizer to avoid reloading for multiple translations."""
-    cache_key = f"{config['tokenizer_file'].format(lang)}"
-    if cache_key not in _TOKENIZER_CACHE:
-        tokenizer_path = Path(config['tokenizer_file'].format(lang))
-        if not tokenizer_path.exists():
-            raise FileNotFoundError(f"Tokenizer file not found: {tokenizer_path}")
-        _TOKENIZER_CACHE[cache_key] = Tokenizer.from_file(str(tokenizer_path))
-    return _TOKENIZER_CACHE[cache_key]
 
 def translate(sentence: Union[str, int], beam_size: int = 1, temperature: float = 1.0, 
             show_progress: bool = True, batch_size: int = 1) -> str:
@@ -202,11 +191,6 @@ def translate(sentence: Union[str, int], beam_size: int = 1, temperature: float 
     print(f"Translation completed in {elapsed:.2f}s")
     
     return translated_text
-
-class DummyContextManager:
-    """A dummy context manager for when autocast is not available."""
-    def __enter__(self): return None
-    def __exit__(self, *args): return None
 
 def main():
     """Main function to handle command line arguments."""
